@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<meta name="description" content="EmulatorJS en PWA : joue aux classiques NES, SNES, GBA, Genesis… depuis une ROM sur ton téléphone.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>RetroPlay</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#050506;color:#cde;font:15px system-ui,-apple-system,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+  body{display:flex;align-items:center;justify-content:center}
+
+  /* ---- Écran d'accueil ---- */
+  #home{display:flex;flex-direction:column;align-items:center;gap:18px;padding:24px;max-width:680px;width:100%;text-align:center}
+  #home h1{margin:0;font-size:clamp(1.6rem,6vw,2.4rem);letter-spacing:.04em;color:#7CFC00;text-shadow:0 0 18px #7CFC0055}
+  #home p{margin:0;color:#8a8a90;line-height:1.5}
+  .logo{width:clamp(72px,18vw,110px);height:clamp(72px,18vw,110px);border-radius:18px;background:#0d0d10;border:1px solid #1f1f24;display:grid;place-items:center;box-shadow:0 0 30px #7CFC0022 inset}
+  .logo svg{width:62%;height:62%}
+
+  select,button{background:#1b1b1fcc;color:#ddd;border:1px solid #3a3a40;border-radius:10px;padding:11px 14px;font:inherit;cursor:pointer;min-height:44px}
+  select:focus,button:focus{outline:1px solid #7CFC00}
+  button:active{background:#333}
+  button.primary{background:#7CFC0018;border-color:#7CFC0066;color:#b6fca0;font-weight:600}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:100%}
+  .row label{display:flex;flex-direction:column;gap:4px;align-items:flex-start;font-size:11px;color:#777}
+  .row select,.row button{width:100%}
+
+  /* ---- Zone de jeu ---- */
+  #game{position:fixed;inset:0;display:none}
+  #game.show{display:block}
+  #exitBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));z-index:20;background:#000a;border:1px solid #333;border-radius:8px;padding:6px 10px;font-size:12px;display:none}
+  #game.show ~ #exitBtn{display:block}
+
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="home">
+  <div class="logo">
+    <svg viewBox="0 0 11 8" shape-rendering="crispEdges" aria-hidden="true">
+      <g fill="#7CFC00">
+        <rect x="2" y="0" width="1" height="1"/><rect x="8" y="0" width="1" height="1"/>
+        <rect x="3" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/>
+        <rect x="2" y="2" width="7" height="1"/>
+        <rect x="1" y="3" width="2" height="1"/><rect x="4" y="3" width="3" height="1"/><rect x="8" y="3" width="2" height="1"/>
+        <rect x="0" y="4" width="11" height="1"/>
+        <rect x="0" y="5" width="1" height="1"/><rect x="2" y="5" width="7" height="1"/><rect x="10" y="5" width="1" height="1"/>
+        <rect x="0" y="6" width="1" height="1"/><rect x="2" y="6" width="1" height="1"/><rect x="8" y="6" width="1" height="1"/><rect x="10" y="6" width="1" height="1"/>
+        <rect x="3" y="7" width="2" height="1"/><rect x="6" y="7" width="2" height="1"/>
+      </g>
+    </svg>
+  </div>
+  <h1>RetroPlay</h1>
+  <p>Émulateur web pour classiques rétro. Choisis une console, sélectionne une ROM sur ton téléphone, et joue.</p>
+
+  <div class="row">
+    <label>Console
+      <select id="sys">
+        <option value="nes">NES / Famicom</option>
+        <option value="snes">SNES</option>
+        <option value="gba">Game Boy Advance</option>
+        <option value="gb">Game Boy</option>
+        <option value="n64">Nintendo 64</option>
+        <option value="segaMD">Mega Drive</option>
+        <option value="segaMS">Master System</option>
+        <option value="segaGG">Game Gear</option>
+        <option value="psx">PlayStation</option>
+        <option value="atari2600">Atari 2600</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="row">
+    <button class="primary" id="bRom">📁 Choisir une ROM</button>
+  </div>
+  <p style="font-size:12px;color:#666">La ROM reste sur ton appareil — rien n'est téléversé.</p>
+</div>
+
+<div id="game"></div>
+<button id="exitBtn">✕ Quitter</button>
+<input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.chd,.a26,.zip,.7z" hidden>
+
+<script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let romBlob = null, romName = '';
+
+// ---- Sélecteur de ROM ----
+$('bRom').onclick = () => $('romIn').click();
+$('romIn').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  romBlob = f; romName = f.name;
+  start();
+};
+
+// ---- Lancement du jeu ----
+const CDN = 'https://cdn.emulatorjs.org/stable/data/';
+async function start() {
+  if (!romBlob) return;
+  $('home').hidden = true;
+  $('game').classList.add('show');
+  poke(); lockScreen(); tryFs();
+
+  // EmulatorJS lit l'URL de la ROM — on crée un blob URL local
+  const url = URL.createObjectURL(romBlob);
+  EJS_player        = '#game';
+  EJS_core          = $('sys').value;
+  EJS_gameUrl       = url;
+  EJS_gameName      = romName.replace(/\.[^.]+$/, '');
+  EJS_pathtodata    = CDN;
+  EJS_startOnLoaded = true;
+  EJS_color         = '#7CFC00';
+  EJS_backgroundColor = '#050506';
+}
+// loader.js expose EJS comme objet global ; les vars ci-dessus sont lues au lancement.
+
+// ---- Plein écran auto ----
+async function tryFs() {
+  try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch {}
+  try { await screen.orientation.lock('landscape'); } catch {}
+}
+$('exitBtn').onclick = async () => {
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+  try { screen.orientation.unlock(); } catch {}
+  location.reload();
+};
+
+// ---- Écran allumé pendant la partie ----
+let wl = null;
+async function lockScreen() {
+  try { if ('wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.onrelease = () => wl = null; } } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lockScreen(); });
+addEventListener('pointerdown', lockScreen, { once: true });
+
+// ---- Anti-sleep de l'UI d'accueil ----
+function poke() {}
+addEventListener('pointerdown', lockScreen, { passive: true });
+
+// ---- Service worker ----
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(console.warn);
+</script>
+</body>
+</html>
