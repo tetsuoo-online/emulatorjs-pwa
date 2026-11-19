@@ -90,11 +90,36 @@ const CDN = 'https://cdn.emulatorjs.org/stable/data/';
 let romBlob = null, romName = '', started = false;
 
 // ---- Sélecteur de ROM ----
+// Mappe extension → EJS_core pour éviter tout mismatch core/ROM
+// (qui ferait retomber EmulatorJS sur le menu XMB RetroArch au lieu de lancer le jeu).
+// Sources ambigües (.bin, .iso, .zip, .7z) : on garde le cœur choisi dans le select.
+const EXT_TO_CORE = {
+  nes: 'nes',     sfc: 'snes',    smc: 'snes',   gba: 'gba',     gbc: 'gb',
+  gb:  'gb',      n64: 'n64',     z64: 'n64',    v64: 'n64',
+  md:  'segaMD',  smd: 'segaMD',  sms: 'segaMS', gg:  'segaGG',  a26: 'atari2600',
+};
+const CORE_LABEL = {
+  nes:'NES', snes:'SNES', gba:'GBA', gb:'Game Boy', n64:'N64',
+  segaMD:'Mega Drive', segaMS:'Master System', segaGG:'Game Gear',
+  psx:'PlayStation', atari2600:'Atari 2600',
+};
+function extOf(name) {
+  const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return m ? m[1] : '';
+}
 $('bRom').onclick = () => $('romIn').click();
 $('romIn').onchange = e => {
   const f = e.target.files[0];
   if (!f) return;
   romBlob = f; romName = f.name;
+  // Auto-détection du cœur depuis l'extension si elle est non-ambiguë.
+  const core = EXT_TO_CORE[extOf(romName)];
+  if (core) {
+    $('sys').value = core;
+    say('Cœur détecté : ' + (CORE_LABEL[core] || core));
+  } else {
+    say('Extension non reconnue — cœur : ' + CORE_LABEL[$('sys').value]);
+  }
   start();
 };
 
@@ -105,12 +130,13 @@ $('romIn').onchange = e => {
 // sur folderPath() (chemin relatif à la page), ferait 404 sur emulator.min.css,
 // puis "EmulatorJS is not defined" (la classe vit dans emulator.min.js jamais chargé).
 // Solution : on pose TOUTES les variables EJS_* puis on injecte loader.js dynamiquement.
-function say(msg) {
+function say(msg, ms = 4500) {
   const t = document.createElement('div');
   t.textContent = msg;
   t.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);background:#000d;color:#fff;border:1px solid #7CFC00;border-radius:8px;padding:8px 14px;z-index:99;font:13px system-ui';
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 4500);
+  setTimeout(() => t.remove(), ms);
+  return t;   // retourne l'élément pour pouvoir le retirer manuellement (ex: EJS_ready)
 }
 async function start() {
   if (!romBlob || started) return;
@@ -118,6 +144,11 @@ async function start() {
   $('home').hidden = true;
   $('game').classList.add('show');
   lockScreen(); tryFs();
+
+  // Indicateur de chargement persistant (la 1re session télécharge plusieurs Mo :
+  // emulator.min.js + le cœur .data. Si on n'affiche rien, l'utilisateur croit que
+  // ça a planté et refresh — d'où la sensation de "devoir débloquer" la 1re fois).
+  const loader = say("Chargement d'EmulatorJS… (1re fois : ~2-8 Mo)", 60000);
 
   // 1) Toutes les variables EJS_* AVANT l'injection de loader.js
   const url = URL.createObjectURL(romBlob);
@@ -130,6 +161,8 @@ async function start() {
   window.EJS_color           = '#7CFC00';
   window.EJS_backgroundColor = '#050506';
   window.EJS_language        = 'en-US';   // fr-FR.json n'existe pas sur le CDN
+  // Callback "ready" : retire l'indicateur une fois le moteur en place.
+  window.EJS_ready           = () => { if (loader) loader.remove(); };
 
   // 2) Injection dynamique de loader.js — il lit les vars ci-dessus à l'exécution
   const s = document.createElement('script');
