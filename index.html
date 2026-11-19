@@ -29,9 +29,11 @@
   .row select,.row button{width:100%}
 
   /* ---- Zone de jeu ---- */
+  /* #exitBtn en top-LEFT pour ne pas écraser le bouton ☰ d'EmulatorJS (top-right),
+     seul moyen sur mobile de rappeler les options après l'auto-hide de la barre basse. */
   #game{position:fixed;inset:0;display:none}
   #game.show{display:block}
-  #exitBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));z-index:20;background:#000a;border:1px solid #333;border-radius:8px;padding:6px 10px;font-size:12px;display:none}
+  #exitBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));left:calc(8px + env(safe-area-inset-left));z-index:50;background:#000a;border:1px solid #333;border-radius:8px;padding:6px 10px;font-size:12px;display:none;min-height:34px}
   #game.show ~ #exitBtn{display:block}
 
   [hidden]{display:none!important}
@@ -81,7 +83,7 @@
 </div>
 
 <div id="game"></div>
-<button id="exitBtn">✕ Quitter</button>
+<button id="exitBtn" title="Quitter le jeu">✕</button>
 <input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.chd,.a26,.zip,.7z" hidden>
 
 <script>
