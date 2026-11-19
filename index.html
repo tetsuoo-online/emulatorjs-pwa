@@ -84,10 +84,10 @@
 <button id="exitBtn">✕ Quitter</button>
 <input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.chd,.a26,.zip,.7z" hidden>
 
-<script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-let romBlob = null, romName = '';
+const CDN = 'https://cdn.emulatorjs.org/stable/data/';
+let romBlob = null, romName = '', started = false;
 
 // ---- Sélecteur de ROM ----
 $('bRom').onclick = () => $('romIn').click();
@@ -99,25 +99,45 @@ $('romIn').onchange = e => {
 };
 
 // ---- Lancement du jeu ----
-const CDN = 'https://cdn.emulatorjs.org/stable/data/';
+// IMPORTANT : loader.js lit window.EJS_* au moment où il s'exécute (ligne 14 et 82-150).
+// Ne PAS le charger via une balise <script> statique en haut de page : il tournerait
+// avant que EJS_pathtodata / EJS_gameUrl / EJS_player ne soient définis, retomberait
+// sur folderPath() (chemin relatif à la page), ferait 404 sur emulator.min.css,
+// puis "EmulatorJS is not defined" (la classe vit dans emulator.min.js jamais chargé).
+// Solution : on pose TOUTES les variables EJS_* puis on injecte loader.js dynamiquement.
+function say(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);background:#000d;color:#fff;border:1px solid #7CFC00;border-radius:8px;padding:8px 14px;z-index:99;font:13px system-ui';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4500);
+}
 async function start() {
-  if (!romBlob) return;
+  if (!romBlob || started) return;
+  started = true;
   $('home').hidden = true;
   $('game').classList.add('show');
-  poke(); lockScreen(); tryFs();
+  lockScreen(); tryFs();
 
-  // EmulatorJS lit l'URL de la ROM — on crée un blob URL local
+  // 1) Toutes les variables EJS_* AVANT l'injection de loader.js
   const url = URL.createObjectURL(romBlob);
-  EJS_player        = '#game';
-  EJS_core          = $('sys').value;
-  EJS_gameUrl       = url;
-  EJS_gameName      = romName.replace(/\.[^.]+$/, '');
-  EJS_pathtodata    = CDN;
-  EJS_startOnLoaded = true;
-  EJS_color         = '#7CFC00';
-  EJS_backgroundColor = '#050506';
+  window.EJS_player          = '#game';
+  window.EJS_core            = $('sys').value;
+  window.EJS_gameUrl         = url;
+  window.EJS_gameName        = romName.replace(/\.[^.]+$/, '');
+  window.EJS_pathtodata      = CDN;
+  window.EJS_startOnLoaded   = true;
+  window.EJS_color           = '#7CFC00';
+  window.EJS_backgroundColor = '#050506';
+  window.EJS_language        = 'en-US';   // fr-FR.json n'existe pas sur le CDN
+
+  // 2) Injection dynamique de loader.js — il lit les vars ci-dessus à l'exécution
+  const s = document.createElement('script');
+  s.src = CDN + 'loader.js';
+  s.async = false;
+  s.onerror = () => say("Échec du chargement d'EmulatorJS (réseau ?). Réessaie.");
+  document.head.appendChild(s);
 }
-// loader.js expose EJS comme objet global ; les vars ci-dessus sont lues au lancement.
 
 // ---- Plein écran auto ----
 async function tryFs() {
@@ -136,10 +156,6 @@ async function lockScreen() {
   try { if ('wakeLock' in navigator && !wl) { wl = await navigator.wakeLock.request('screen'); wl.onrelease = () => wl = null; } } catch {}
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lockScreen(); });
-addEventListener('pointerdown', lockScreen, { once: true });
-
-// ---- Anti-sleep de l'UI d'accueil ----
-function poke() {}
 addEventListener('pointerdown', lockScreen, { passive: true });
 
 // ---- Service worker ----
