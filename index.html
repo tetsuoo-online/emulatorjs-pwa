@@ -14,7 +14,7 @@
   body{display:flex;align-items:center;justify-content:center}
 
   /* ---- Écran d'accueil ---- */
-  #home{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px;max-width:680px;width:100%;text-align:center}
+  #home{display:flex;flex-direction:column;align-items:center;gap:18px;padding:24px;max-width:680px;width:100%;text-align:center}
   #home h1{margin:0;font-size:clamp(1.6rem,6vw,2.4rem);letter-spacing:.04em;color:#7CFC00;text-shadow:0 0 18px #7CFC0055}
   #home p{margin:0;color:#8a8a90;line-height:1.5}
   .logo{width:clamp(72px,18vw,110px);height:clamp(72px,18vw,110px);border-radius:18px;background:#0d0d10;border:1px solid #1f1f24;display:grid;place-items:center;box-shadow:0 0 30px #7CFC0022 inset}
@@ -57,9 +57,10 @@
     </svg>
   </div>
   <h1>RetroPlay</h1>
+  <p>Émulateur web pour classiques rétro. Choisis une console, sélectionne une ROM sur ton téléphone, et joue.</p>
 
   <div class="row">
-    <label>
+    <label>Console
       <select id="sys">
         <option value="nes">NES / Famicom</option>
         <option value="snes">SNES</option>
@@ -71,6 +72,8 @@
         <option value="segaGG">Game Gear</option>
         <option value="psx">PlayStation</option>
         <option value="atari2600">Atari 2600</option>
+        <option value="arcade">Arcade (FBNeo)</option>
+        <option value="pce">PC-Engine / TurboGrafx-16</option>
       </select>
     </label>
   </div>
@@ -83,12 +86,12 @@
   <!-- Mises à jour : un bouton "Màj disponible" s'insère ici automatiquement
        quand un nouveau SW attend. + un petit lien de vérification manuelle. -->
   <div id="updSlot" style="min-height:0"></div>
-  <button id="bUpd" style="margin-top:0px;padding:5px 10px;font-size:11px;min-height:auto;background:#14141ccc;border-color:#2a2a2e;color:#888">🔄 Vérifier les mises à jour</button>
+  <button id="bUpd" style="margin-top:6px;padding:5px 10px;font-size:11px;min-height:auto;background:#14141ccc;border-color:#2a2a2e;color:#888">🔄 Vérifier les mises à jour</button>
 </div>
 
 <div id="game"></div>
 <button id="exitBtn" title="Quitter le jeu">✕</button>
-<input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.chd,.a26,.zip,.7z" hidden>
+<input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.ccd,.chd,.img,.a26,.pce,.zip,.7z" hidden>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -103,11 +106,15 @@ const EXT_TO_CORE = {
   nes: 'nes',     sfc: 'snes',    smc: 'snes',   gba: 'gba',     gbc: 'gb',
   gb:  'gb',      n64: 'n64',     z64: 'n64',    v64: 'n64',
   md:  'segaMD',  smd: 'segaMD',  sms: 'segaMS', gg:  'segaGG',  a26: 'atari2600',
+  pce: 'pce',
+  // Arcade (fbneo) : pas d'auto-détection — les ROMs sont des .zip génériques
+  // (le nom du zip = le ROM set). L'utilisateur doit sélectionner "Arcade" manuellement.
 };
 const CORE_LABEL = {
   nes:'NES', snes:'SNES', gba:'GBA', gb:'Game Boy', n64:'N64',
   segaMD:'Mega Drive', segaMS:'Master System', segaGG:'Game Gear',
   psx:'PlayStation', atari2600:'Atari 2600',
+  arcade:'Arcade (FBNeo)', pce:'PC-Engine / TurboGrafx',
 };
 function extOf(name) {
   const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
