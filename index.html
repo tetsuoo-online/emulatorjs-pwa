@@ -130,7 +130,9 @@ $('romIn').onchange = e => {
     $('sys').value = core;
     say('Cœur détecté : ' + (CORE_LABEL[core] || core));
   } else {
-    say('Extension non reconnue — cœur : ' + CORE_LABEL[$('sys').value]);
+    // .zip/.7z = conteneurs génériques, .bin/.iso/.cue/.chd = multi-systèmes :
+    // impossible de deviner le cœur, on utilise celui choisi dans le select.
+    say('Cœur : ' + (CORE_LABEL[$('sys').value] || $('sys').value) + ' (sélection manuelle)');
   }
   start();
 };
@@ -164,10 +166,18 @@ async function start() {
 
   // 1) Toutes les variables EJS_* AVANT l'injection de loader.js
   const url = URL.createObjectURL(romBlob);
+  const core = $('sys').value;
+  // Arcade/mame : le chemin ROM d'EmulatorJS saute la décompression et écrit le zip
+  // brut dans le FS virtuel sous getBaseFileName(!0). Comme gameUrl est un blob:,
+  // getBaseFileName tombe sur EJS_gameName. Il FAUT donc garder l'extension .zip
+  // (fbneo cherche <romset>.zip). Pour les autres systèmes, on garde l'ancien
+  // comportement (nom sans extension) — ils passent par checkCompression qui
+  // résout le vrai nom de fichier interne.
+  const arcadeLike = (core === 'arcade' || core === 'mame');
   window.EJS_player          = '#game';
-  window.EJS_core            = $('sys').value;
+  window.EJS_core            = core;
   window.EJS_gameUrl         = url;
-  window.EJS_gameName        = romName.replace(/\.[^.]+$/, '');
+  window.EJS_gameName        = arcadeLike ? romName : romName.replace(/\.[^.]+$/, '');
   window.EJS_pathtodata      = CDN;
   window.EJS_startOnLoaded   = true;
   window.EJS_color           = '#7CFC00';
