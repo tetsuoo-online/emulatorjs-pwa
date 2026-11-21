@@ -36,6 +36,17 @@
   #exitBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));left:calc(8px + env(safe-area-inset-left));z-index:50;background:#000a;border:1px solid #333;border-radius:8px;padding:6px 10px;font-size:12px;display:none;min-height:34px}
   #game.show ~ #exitBtn{display:block}
 
+  /* ---- Bouton Réglages + panneau (visibles sur l'accueil, masqués en jeu) ---- */
+  #bSettings{position:fixed;top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));z-index:30;background:#000a;border:1px solid #333;border-radius:8px;padding:6px 12px;font-size:15px;min-height:34px;line-height:1}
+  #game.show ~ #bSettings{display:none}
+  #settings{position:fixed;inset:0;z-index:60;background:#000a;display:flex;align-items:center;justify-content:center;padding:20px}
+  .settings-card{background:#0d0d10;border:1px solid #2a2a30;border-radius:14px;padding:20px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:14px;box-shadow:0 8px 40px #0009}
+  .settings-card h2{margin:0;font-size:1.1rem;color:#7CFC00}
+  .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .set-row span{font-size:14px;color:#bbb}
+  .set-info{font-size:12px;color:#666;line-height:1.5;margin:0}
+  .settings-card button{align-self:flex-end}
+
   [hidden]{display:none!important}
 </style>
 </head>
@@ -78,24 +89,137 @@
   </div>
 
   <div class="row">
-    <button class="primary" id="bRom">📁 Choisir une ROM</button>
+    <button class="primary" id="bRom" data-i18n="rom_btn">📁 Choisir une ROM</button>
   </div>
-  <p style="font-size:12px;color:#666">La ROM reste sur ton appareil — rien n'est téléversé.</p>
+  <p style="font-size:12px;color:#666" data-i18n="rom_privacy">La ROM reste sur ton appareil — rien n'est téléversé.</p>
 
   <!-- Mises à jour : un bouton "Màj disponible" s'insère ici automatiquement
        quand un nouveau SW attend. + un petit lien de vérification manuelle. -->
   <div id="updSlot" style="min-height:0"></div>
-  <button id="bUpd" style="margin-top:0px;padding:5px 10px;font-size:11px;min-height:auto;background:#14141ccc;border-color:#2a2a2e;color:#888">🔄 Vérifier les mises à jour</button>
+  <button id="bUpd" data-i18n="check_updates" style="margin-top:0px;padding:5px 10px;font-size:11px;min-height:auto;background:#14141ccc;border-color:#2a2a2e;color:#888">🔄 Vérifier les mises à jour</button>
 </div>
 
 <div id="game"></div>
 <button id="exitBtn" title="Quitter le jeu">✕</button>
+<button id="bSettings" title="Réglages">⚙️</button>
 <input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.ccd,.chd,.img,.a26,.pce,.zip,.7z" hidden>
+
+<!-- Panneau Réglages -->
+<div id="settings" hidden>
+  <div class="settings-card">
+    <h2 data-i18n="settings_title">Réglages</h2>
+    <label class="set-row">
+      <span data-i18n="settings_lang">Langue</span>
+      <select id="langSel">
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+    <p class="set-info" data-i18n="settings_save_info">Sauvegarde d'état : fichiers .state uniques (horodatés) — plus d'écrasement.</p>
+    <p class="set-info" id="setVersion" style="text-align:center;opacity:.6;margin-top:-4px"></p>
+    <button id="settingsClose" data-i18n="settings_close">Fermer</button>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
 const CDN = 'https://cdn.emulatorjs.org/stable/data/';
 let romBlob = null, romName = '', started = false;
+const VERSION = '1.4';   // affiché dans Réglages — pour vérifier qu'on run le nouveau code
+
+// ---- i18n FR/EN (l'UI d'EmulatorJS reste en anglais : fr-FR.json absent du CDN) ----
+const STRINGS = {
+  fr: {
+    rom_btn:'📁 Choisir une ROM', rom_privacy:"La ROM reste sur ton appareil — rien n'est téléversé.",
+    check_updates:'🔄 Vérifier les mises à jour', update_available:'⬇ Mise à jour disponible — installer',
+    exit_title:'Quitter le jeu', settings_title:'Réglages', settings_lang:'Langue',
+    settings_save_info:"Sauvegarde d'état : fichiers .state uniques (horodatés) — plus d'écrasement.",
+    settings_close:'Fermer',
+    core_detected:'Cœur détecté : ', core_using:'Cœur : ', core_manual:' (sélection manuelle)',
+    loading_ejs:"Chargement d'EmulatorJS… (1re fois : ~2-8 Mo)",
+    load_failed:"Échec du chargement d'EmulatorJS (réseau ?). Réessaie.",
+    check_done:'Vérification effectuée', check_failed:'Vérification impossible',
+    state_saved:'État sauvegardé : ', state_load_pick:'Choisis un fichier .state',
+    state_load_ok:'État chargé', state_load_err:"Échec du chargement de l'état",
+  },
+  en: {
+    rom_btn:'📁 Choose ROM', rom_privacy:'ROM stays on your device — nothing is uploaded.',
+    check_updates:'🔄 Check for updates', update_available:'⬇ Update available — install',
+    exit_title:'Exit game', settings_title:'Settings', settings_lang:'Language',
+    settings_save_info:'State save: unique timestamped .state files — no more overwriting.',
+    settings_close:'Close',
+    core_detected:'Core detected: ', core_using:'Core: ', core_manual:' (manual)',
+    loading_ejs:'Loading EmulatorJS… (first time: ~2-8 MB)',
+    load_failed:'Failed to load EmulatorJS (network?). Try again.',
+    check_done:'Check complete', check_failed:'Check failed',
+    state_saved:'State saved: ', state_load_pick:'Choose a .state file',
+    state_load_ok:'State loaded', state_load_err:'Failed to load state',
+  },
+};
+let lang = localStorage.getItem('rp_lang') || 'fr';
+function t(k){ return (STRINGS[lang] && STRINGS[lang][k]) || STRINGS.fr[k] || k; }
+function applyStrings(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  const ls = $('langSel'); if (ls) ls.value = lang;
+  $('exitBtn').title = t('exit_title');
+  $('bSettings').title = t('settings_title');
+}
+function setLang(l){ lang = l; localStorage.setItem('rp_lang', l); applyStrings(); }
+
+// ---- Panneau Réglages ----
+$('bSettings').onclick = () => { $('settings').hidden = false; };
+$('settingsClose').onclick = () => { $('settings').hidden = true; };
+$('settings').onclick = e => { if (e.target === $('settings')) $('settings').hidden = true; };
+$('langSel').onchange = e => setLang(e.target.value);
+applyStrings();
+$('setVersion').textContent = 'Version ' + VERSION;
+
+// ---- Save/Load state : noms uniques horodatés (plus d'écrasement) ----
+// EmulatorJS appelle callEvent("saveState",{state,...}) au clic sur le bouton Save.
+// Si un handler est enregistré via EJS_emulator.on("saveState",fn), callEvent
+// retourne >0 et le code SAUTE la sauvegarde par défaut (slot browser unique OU
+// fichier à nom fixe → écrasement). On génère donc un .state horodaté unique.
+// Symétrique pour loadState : on remplace par un sélecteur de fichier.
+function tsStamp(){
+  const d = new Date(), p = n => String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes())+p(d.getSeconds());
+}
+function downloadBytes(bytes, filename){
+  const url = URL.createObjectURL(new Blob([bytes]));
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+function pickStateFile(){
+  return new Promise(res => {
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.state';
+    inp.onchange = () => res(inp.files[0] || null);
+    inp.click();
+  });
+}
+function registerStateHooks(emu){
+  if (!emu || typeof emu.on !== 'function') return;
+  emu.on('saveState', (e) => {
+    if (!e || !e.state) return;
+    const base = (window.EJS_gameName || 'game').replace(/[^a-z0-9._-]/gi,'');
+    const name = base + '-' + tsStamp() + '.state';
+    downloadBytes(e.state, name);
+    say(t('state_saved') + name, 6000);
+  });
+  emu.on('loadState', async () => {
+    say(t('state_load_pick'), 8000);
+    const f = await pickStateFile();
+    if (!f) return;
+    try {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      emu.gameManager.loadState(bytes);
+      say(t('state_load_ok'));
+    } catch (err) { console.warn(err); say(t('state_load_err')); }
+  });
+}
 
 // ---- Sélecteur de ROM ----
 // Mappe extension → EJS_core pour éviter tout mismatch core/ROM
@@ -128,11 +252,11 @@ $('romIn').onchange = e => {
   const core = EXT_TO_CORE[extOf(romName)];
   if (core) {
     $('sys').value = core;
-    say('Cœur détecté : ' + (CORE_LABEL[core] || core));
+    say(t('core_detected') + (CORE_LABEL[core] || core));
   } else {
     // .zip/.7z = conteneurs génériques, .bin/.iso/.cue/.chd = multi-systèmes :
     // impossible de deviner le cœur, on utilise celui choisi dans le select.
-    say('Cœur : ' + (CORE_LABEL[$('sys').value] || $('sys').value) + ' (sélection manuelle)');
+    say(t('core_using') + (CORE_LABEL[$('sys').value] || $('sys').value) + t('core_manual'));
   }
   start();
 };
@@ -162,7 +286,7 @@ async function start() {
   // Indicateur de chargement persistant (la 1re session télécharge plusieurs Mo :
   // emulator.min.js + le cœur .data. Si on n'affiche rien, l'utilisateur croit que
   // ça a planté et refresh — d'où la sensation de "devoir débloquer" la 1re fois).
-  const loader = say("Chargement d'EmulatorJS… (1re fois : ~2-8 Mo)", 60000);
+  const loader = say(t('loading_ejs'), 60000);
 
   // 1) Toutes les variables EJS_* AVANT l'injection de loader.js
   const url = URL.createObjectURL(romBlob);
@@ -183,14 +307,28 @@ async function start() {
   window.EJS_color           = '#7CFC00';
   window.EJS_backgroundColor = '#050506';
   window.EJS_language        = 'en-US';   // fr-FR.json n'existe pas sur le CDN
-  // Callback "ready" : retire l'indicateur une fois le moteur en place.
-  window.EJS_ready           = () => { if (loader) loader.remove(); };
+  // Callback "ready" : retire l'indicateur + enregistre les hooks save/load state.
+  window.EJS_ready           = () => { if (loader) loader.remove(); registerStateHooks(window.EJS_emulator); };
+  // Bouton Exit du menu EmulatorJS : par défaut il affiche "EmulatorJS has exited"
+  // et laisse l'émulateur mort (page bloquée). Le hook EJS_onExit est appelé juste
+  // après ce message — on en profite pour recharger la page (= retour à l'accueil,
+  // même nettoyage plein-écran/orientation que le bouton ✕, mais APRÈS la
+  // confirmation demandée par EmulatorJS). Garde anti-boucle (beforeunload rappelle exit).
+  let _exiting = false;
+  window.EJS_onExit = () => {
+    if (_exiting) return 1;
+    _exiting = true;
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
+    try { screen.orientation.unlock(); } catch {}
+    location.reload();
+    return 1;
+  };
 
   // 2) Injection dynamique de loader.js — il lit les vars ci-dessus à l'exécution
   const s = document.createElement('script');
   s.src = CDN + 'loader.js';
   s.async = false;
-  s.onerror = () => say("Échec du chargement d'EmulatorJS (réseau ?). Réessaie.");
+  s.onerror = () => say(t('load_failed'));
   document.head.appendChild(s);
 }
 
@@ -225,7 +363,7 @@ function showUpdate(onApply) {
   if ($('updApply')) return;   // un seul bouton à la fois
   const b = document.createElement('button');
   b.id = 'updApply'; b.className = 'primary';
-  b.textContent = '⬇ Mise à jour disponible — installer';
+  b.textContent = t('update_available');
   b.style.cssText = 'margin-top:8px';
   b.onclick = () => { b.remove(); onApply(); };
   $('updSlot').appendChild(b);
@@ -265,8 +403,8 @@ $('bUpd').onclick = async () => {
   try {
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg) await reg.update();
-    say('Vérification effectuée');
-  } catch (e) { console.warn(e); say('Vérification impossible'); }
+    say(t('check_done'));
+  } catch (e) { console.warn(e); say(t('check_failed')); }
 };
 initSW();
 </script>
