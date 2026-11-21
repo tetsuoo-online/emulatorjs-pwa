@@ -121,7 +121,8 @@
 <script>
 const $ = id => document.getElementById(id);
 let romBlob = null, romName = '', started = false;
-const VERSION = '2.0';   // auto-hébergé : data/ local + Exit patché (affiché dans Réglages)
+const VERSION = '2.1';
+const DATA_URL = new URL('./data/', document.baseURI);
 
 // ---- i18n FR/EN (l'UI d'EmulatorJS reste en anglais : fr-FR.json absent du data/ local) ----
 const STRINGS = {
@@ -284,20 +285,17 @@ async function start() {
   const loader = say(t('loading_ejs'), 60000);
 
   // 1) Toutes les variables EJS_* AVANT l'injection de loader.js
-  const url = URL.createObjectURL(romBlob);
   const core = $('sys').value;
-  // Arcade/mame : le chemin ROM d'EmulatorJS saute la décompression et écrit le zip
-  // brut dans le FS virtuel sous getBaseFileName(!0). Comme gameUrl est un blob:,
-  // getBaseFileName tombe sur EJS_gameName. Il FAUT donc garder l'extension .zip
-  // (fbneo cherche <romset>.zip). Pour les autres systèmes, on garde l'ancien
-  // comportement (nom sans extension) — ils passent par checkCompression qui
-  // résout le vrai nom de fichier interne.
+  // Utilise le Blob directement : 4.2.3 sait le lire sans requête sur une URL blob:.
+  // slice() retourne un Blob et non un File : après lecture, EmulatorJS utilise
+  // EJS_gameName pour conserver les mêmes noms de sauvegarde qu'auparavant.
+  // FBNeo attend l'archive intacte avec son nom complet (romset.zip).
   const arcadeLike = (core === 'arcade' || core === 'mame');
   window.EJS_player          = '#game';
   window.EJS_core            = core;
-  window.EJS_gameUrl         = url;
+  window.EJS_gameUrl         = romBlob.slice();
   window.EJS_gameName        = arcadeLike ? romName : romName.replace(/\.[^.]+$/, '');
-  window.EJS_pathtodata      = './data/';   // auto-hébergé (loader.js + emulator.min.js patché + cœurs)
+  window.EJS_pathtodata      = DATA_URL.href;
   window.EJS_startOnLoaded   = true;
   window.EJS_color           = '#7CFC00';
   window.EJS_backgroundColor = '#050506';
@@ -312,9 +310,12 @@ async function start() {
 
   // 2) Injection dynamique de loader.js — il lit les vars ci-dessus à l'exécution
   const s = document.createElement('script');
-  s.src = './data/loader.js';
+  s.src = new URL('loader.js', DATA_URL).href;
   s.async = false;
-  s.onerror = () => say(t('load_failed'));
+  s.onerror = () => {
+    loader.remove();
+    say(t('load_failed') + ' ' + s.src);
+  };
   document.head.appendChild(s);
 }
 
@@ -358,7 +359,7 @@ function showUpdate(onApply) {
 async function initSW() {
   if (!('serviceWorker' in navigator)) return;
   let reg;
-  try { reg = await navigator.serviceWorker.register('sw.js'); }
+  try { reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }); }
   catch (e) { console.warn(e); return; }
 
   reg.addEventListener('updatefound', () => {
