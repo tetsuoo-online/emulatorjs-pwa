@@ -7,8 +7,8 @@
 //  - Update : le nouveau SW reste en attente (waiting) jusqu'à recevoir
 //    {type:'SKIP_WAITING'} de la page, puis s'active → controllerchange → reload auto.
 
-const SHELL = 'retro-shell-v2';
-const RUNTIME = 'retro-runtime-v1';
+const SHELL = 'retro-shell-v4';
+const RUNTIME = 'retro-runtime-v2';
 const CDN = 'https://cdn.emulatorjs.org/';
 
 const APP_FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
@@ -69,7 +69,9 @@ self.addEventListener('fetch', e => {
   //     (offline). C'est CE point qui rend les màj visibles au prochain lancer.
   if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
     e.respondWith(
-      fetch(req)
+      // cache:'no-cache' → revalidation systématique auprès du serveur, sinon le cache
+      // HTTP du navigateur peut renvoyer un index.html périmé et casser le network-first.
+      fetch(req, { cache: 'no-cache' })
         .then(res => {
           if (res.ok) caches.open(SHELL).then(c => c.put(req, res.clone()));
           return res;
@@ -79,14 +81,19 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // 2b) Autres assets same-origin (icônes, manifest) → cache-first + màj arrière-plan
+  // 2b) Autres assets same-origin → cache-first + màj arrière-plan.
+  //     data/ (emulator.min.js + cœurs .data, jusqu'à ~8 Mo) va dans RUNTIME
+  //     (volumineux, séparé du shell) ; icônes/manifest restent dans SHELL.
+  const cacheName = url.pathname.startsWith('/data/') ? RUNTIME : SHELL;
   e.respondWith(
-    caches.match(req).then(hit => {
-      const net = fetch(req).then(res => {
-        if (res.ok) caches.open(SHELL).then(c => c.put(req, res.clone()));
-        return res;
-      }).catch(() => hit);
-      return hit || net;
-    })
+    caches.open(cacheName).then(c =>
+      c.match(req).then(hit => {
+        const net = fetch(req).then(res => {
+          if (res.ok) c.put(req, res.clone());
+          return res;
+        }).catch(() => hit);
+        return hit || net;
+      })
+    )
   );
 });

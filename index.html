@@ -79,11 +79,8 @@
         <option value="nes">NES / Famicom</option>
         <option value="gba">Game Boy Advance</option>
         <option value="gb">Game Boy</option>
-        <option value="n64">Nintendo 64</option>
-        <option value="psx">PlayStation</option>
         <option value="segaMS">Master System</option>
         <option value="segaGG">Game Gear</option>
-        <option value="atari2600">Atari 2600</option>
       </select>
     </label>
   </div>
@@ -102,7 +99,7 @@
 <div id="game"></div>
 <button id="exitBtn" title="Quitter le jeu">✕</button>
 <button id="bSettings" title="Réglages">⚙️</button>
-<input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.z64,.n64,.v64,.md,.smd,.sms,.gg,.bin,.iso,.cue,.ccd,.chd,.img,.a26,.pce,.zip,.7z" hidden>
+<input id="romIn" type="file" accept=".nes,.sfc,.smc,.gba,.gbc,.gb,.md,.smd,.sms,.gg,.bin,.iso,.cue,.ccd,.chd,.img,.pce,.zip,.7z" hidden>
 
 <!-- Panneau Réglages -->
 <div id="settings" hidden>
@@ -123,11 +120,10 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const CDN = 'https://cdn.emulatorjs.org/stable/data/';
 let romBlob = null, romName = '', started = false;
-const VERSION = '1.4';   // affiché dans Réglages — pour vérifier qu'on run le nouveau code
+const VERSION = '2.0';   // auto-hébergé : data/ local + Exit patché (affiché dans Réglages)
 
-// ---- i18n FR/EN (l'UI d'EmulatorJS reste en anglais : fr-FR.json absent du CDN) ----
+// ---- i18n FR/EN (l'UI d'EmulatorJS reste en anglais : fr-FR.json absent du data/ local) ----
 const STRINGS = {
   fr: {
     rom_btn:'📁 Choisir une ROM', rom_privacy:"La ROM reste sur ton appareil — rien n'est téléversé.",
@@ -227,16 +223,15 @@ function registerStateHooks(emu){
 // Sources ambigües (.bin, .iso, .zip, .7z) : on garde le cœur choisi dans le select.
 const EXT_TO_CORE = {
   nes: 'nes',     sfc: 'snes',    smc: 'snes',   gba: 'gba',     gbc: 'gb',
-  gb:  'gb',      n64: 'n64',     z64: 'n64',    v64: 'n64',
-  md:  'segaMD',  smd: 'segaMD',  sms: 'segaMS', gg:  'segaGG',  a26: 'atari2600',
+  gb:  'gb',
+  md:  'segaMD',  smd: 'segaMD',  sms: 'segaMS', gg:  'segaGG',
   pce: 'pce',
   // Arcade (fbneo) : pas d'auto-détection — les ROMs sont des .zip génériques
   // (le nom du zip = le ROM set). L'utilisateur doit sélectionner "Arcade" manuellement.
 };
 const CORE_LABEL = {
-  nes:'NES', snes:'SNES', gba:'GBA', gb:'Game Boy', n64:'N64',
+  nes:'NES', snes:'SNES', gba:'GBA', gb:'Game Boy',
   segaMD:'Mega Drive', segaMS:'Master System', segaGG:'Game Gear',
-  psx:'PlayStation', atari2600:'Atari 2600',
   arcade:'Arcade (FBNeo)', pce:'PC-Engine / TurboGrafx',
 };
 function extOf(name) {
@@ -302,31 +297,22 @@ async function start() {
   window.EJS_core            = core;
   window.EJS_gameUrl         = url;
   window.EJS_gameName        = arcadeLike ? romName : romName.replace(/\.[^.]+$/, '');
-  window.EJS_pathtodata      = CDN;
+  window.EJS_pathtodata      = './data/';   // auto-hébergé (loader.js + emulator.min.js patché + cœurs)
   window.EJS_startOnLoaded   = true;
   window.EJS_color           = '#7CFC00';
   window.EJS_backgroundColor = '#050506';
-  window.EJS_language        = 'en-US';   // fr-FR.json n'existe pas sur le CDN
+  window.EJS_language        = 'en-US';   // l'UI d'EmulatorJS reste en anglais
+  window.EJS_disableAutoLang = false;     // évite le fetch 404 de localization/<lang>.json
   // Callback "ready" : retire l'indicateur + enregistre les hooks save/load state.
   window.EJS_ready           = () => { if (loader) loader.remove(); registerStateHooks(window.EJS_emulator); };
-  // Bouton Exit du menu EmulatorJS : par défaut il affiche "EmulatorJS has exited"
-  // et laisse l'émulateur mort (page bloquée). Le hook EJS_onExit est appelé juste
-  // après ce message — on en profite pour recharger la page (= retour à l'accueil,
-  // même nettoyage plein-écran/orientation que le bouton ✕, mais APRÈS la
-  // confirmation demandée par EmulatorJS). Garde anti-boucle (beforeunload rappelle exit).
-  let _exiting = false;
-  window.EJS_onExit = () => {
-    if (_exiting) return 1;
-    _exiting = true;
-    try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
-    try { screen.orientation.unlock(); } catch {}
-    location.reload();
-    return 1;
-  };
+  // Bouton Exit du menu EmulatorJS : PATCHÉ dans data/emulator.min.js (auto-hébergé)
+  // pour appeler window.RetroExit() au lieu de la popup bloquante "EmulatorJS has exited".
+  // (loader.js ne branche jamais EJS_onExit — le hook était mort-né, d'où le patch direct.)
+  window.RetroExit = goHome;
 
   // 2) Injection dynamique de loader.js — il lit les vars ci-dessus à l'exécution
   const s = document.createElement('script');
-  s.src = CDN + 'loader.js';
+  s.src = './data/loader.js';
   s.async = false;
   s.onerror = () => say(t('load_failed'));
   document.head.appendChild(s);
@@ -337,11 +323,12 @@ async function tryFs() {
   try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); } catch {}
   try { await screen.orientation.lock('landscape'); } catch {}
 }
-$('exitBtn').onclick = async () => {
-  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+function goHome() {
+  try { if (document.fullscreenElement) document.exitFullscreen(); } catch {}
   try { screen.orientation.unlock(); } catch {}
-  location.reload();
-};
+  location.reload();   // détruit l'émulateur + revient à l'accueil (même chemin que le bouton ✕)
+}
+$('exitBtn').onclick = goHome;
 
 // ---- Écran allumé pendant la partie ----
 let wl = null;
