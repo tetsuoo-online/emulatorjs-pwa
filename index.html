@@ -121,7 +121,7 @@
 <script>
 const $ = id => document.getElementById(id);
 let romBlob = null, romName = '', started = false;
-const VERSION = '2.1';
+const VERSION = '2.3';   // v2.3 : préchargement intégral des 16 cœurs + cache-first (data/)
 const DATA_URL = new URL('./data/', document.baseURI);
 
 // ---- i18n FR/EN (l'UI d'EmulatorJS reste en anglais : fr-FR.json absent du data/ local) ----
@@ -301,6 +301,9 @@ async function start() {
   window.EJS_backgroundColor = '#050506';
   window.EJS_language        = 'en-US';   // l'UI d'EmulatorJS reste en anglais
   window.EJS_disableAutoLang = false;     // évite le fetch 404 de localization/<lang>.json
+  window.EJS_forceLegacyCores = true;     // TEST : force le rendu logiciel (-legacy) même sur PC (WebGL2).
+                                          // -> si ça tourne bien, on supprime les 8 cœurs standard (-15,5 Mo).
+                                          //    Mettre false (ou effacer la ligne) pour revenir au WebGL2.
   // Callback "ready" : retire l'indicateur + enregistre les hooks save/load state.
   window.EJS_ready           = () => { if (loader) loader.remove(); registerStateHooks(window.EJS_emulator); };
   // Bouton Exit du menu EmulatorJS : PATCHÉ dans data/emulator.min.js (auto-hébergé)
